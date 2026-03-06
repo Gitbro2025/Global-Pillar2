@@ -91,7 +91,7 @@ def call_claude(prompt):
         client = anthropic.Anthropic(api_key=key)
         msg = client.messages.create(
             model="claude-opus-4-5",
-            max_tokens=2048,
+            max_tokens=4096,
             messages=[{"role": "user", "content": prompt}]
         )
         return msg.content[0].text
@@ -132,6 +132,272 @@ def generate_word_doc(title, content):
     doc.save(buf)
     buf.seek(0)
     return buf.getvalue()
+
+def build_template_prompt(template_name, entity_list, summary, tx_list):
+    base = (
+        f"You are a senior international tax expert specialising in OECD Pillar II GloBE rules, "
+        f"South African tax law (SARS), and insurance sector taxation.\n\n"
+        f"Generate a professional, detailed {template_name} for OUTsurance Group — a South African "
+        f"non-life insurance holding company (UPE) with subsidiaries in Australia and Ireland.\n\n"
+        f"LIVE GROUP DATA:\nEntities: {entity_list}\n\nGloBE Calculation Results:\n{summary}\n\n"
+        f"Intercompany Transactions: {tx_list}\n\n"
+        "SOUTH AFRICAN (SARS) REGULATORY FRAMEWORK:\n"
+        "- Income Tax Act No. 58 of 1962 (ITA): GloBE IIR enacted via Section 9H; QDMTT via Section 9I (effective 1 January 2024)\n"
+        "- Taxation Laws Amendment Act (TLAB) 2023: primary GloBE enabling legislation\n"
+        "- Tax Administration Act No. 28 of 2011 (TAA): Section 257B — CbCR obligations for UPEs with group revenue > ZAR 10 billion\n"
+        "- Transfer Pricing: Section 31 ITA and SARS Practice Note 7 of 2005 (arm's length standard, contemporaneous documentation)\n"
+        "- SARS Interpretation Note 80: deferred tax accounting under IAS 12\n"
+        "- SARS Binding General Rulings BGR 14 and BGR 31: short-term insurance specific tax treatment\n"
+        "- SARS IT14 corporate income tax return and IT14SD Supplementary Declaration reconciliation\n"
+        "- SARS eFiling XML submission requirements and GIR notification obligations\n"
+        "- Financial Sector Conduct Authority (FSCA) and Prudential Authority (South African Reserve Bank) regulatory context\n"
+        "- King IV Report on Corporate Governance for South Africa 2016 — Principle 15 (responsible tax)\n"
+        "- SAICA guidance notes on Pillar II GloBE implementation for South African entities\n\n"
+        "GLOBAL BEST PRACTICE FRAMEWORK:\n"
+        "- OECD GloBE Model Rules (December 2021) and Commentary (March 2022)\n"
+        "- OECD Administrative Guidance: February 2023 (deferred tax, QDMTT), July 2023 (STTR, insurance), December 2023 (GIR filing)\n"
+        "- OECD GloBE Information Return (GIR) XML schema and filing instructions (December 2023)\n"
+        "- OECD Transitional CbCR Safe Harbour guidance (December 2022): De Minimis, Simplified ETR, Routine Profits tests\n"
+        "- OECD BEPS Action 13: CbCR, Master File, Local File requirements\n"
+        "- IFRS 17 Insurance Contracts: impact on GloBE financial accounts basis\n"
+        "- IFRS 9 Financial Instruments and IAS 12 Income Taxes: deferred tax adjustments under GloBE\n"
+        "- Australia Treasury Laws Amendment Act 2024: Pillar Two IIR and QDMTT implementation\n"
+        "- Ireland Finance Act 2024: Section 111AAK QDMTT and IIR (15% top-up on 12.5% STR — primary group exposure)\n"
+        "- Big Four technical guidance: KPMG Pillar Two Navigator, Deloitte Global Minimum Tax Analyser, PwC Pillar Two Hub, EY Global Tax Alert\n"
+        "- Global insurance peer ETR benchmarks: Zurich Insurance (~15.2%), Munich Re (~16.8%), Allianz (~18.1%), Sanlam (~18.9%)\n\n"
+    )
+    specifics = {
+        "GloBE Information Return (GIR)": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (GIR):\n"
+            "- Structure per OECD GIR December 2023 XML schema: Part I (Overview), Part II (Constituent Entity Data), "
+            "Part III (Jurisdiction Data), Part IV (Top-up Tax Allocation), Part V (Additional Information)\n"
+            "- All mandatory data fields per OECD GIR Article 44 filing obligation\n"
+            "- South Africa as UPE: first-year transitional filing deadline 18 months post fiscal year-end; "
+            "subsequent years 15 months\n"
+            "- SARS Section 257B TAA: notify SARS of UPE filing status and confirm no local surrogate filing\n"
+            "- Constituent entity table: all 4 OUTsurance entities with TIN, jurisdiction, role, entity type\n"
+            "- Jurisdiction-level summary tables: GloBE Income, Adjusted Covered Taxes, ETR, SBIE, Top-up Tax\n"
+            "- QDMTT credit mechanism: Ireland Finance Act 2024 QDMTT creditable against IIR charged by ZA UPE\n"
+            "- Transitional safe harbour elections: document per-jurisdiction decisions in Part V\n"
+            "- Insurance-specific disclosures: IFRS 17 technical provisions treatment, DAC elimination impact\n"
+            "- SARS eFiling XML submission preparation steps and IT14 cross-reference\n"
+        ),
+        "QDMTT Calculation Worksheet": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (QDMTT Worksheet):\n"
+            "- Step-by-step calculation per OECD Article 10.1 definition of Qualified Domestic Minimum Top-up Tax\n"
+            "- Ireland QDMTT (primary exposure): Finance Act 2024 Section 111AAK — calculate exact top-up from 12.5% STR to 15% GloBE minimum\n"
+            "- South Africa QDMTT: Section 9I ITA — calculate to confirm nil exposure (27% STR well above 15%)\n"
+            "- Ireland step-by-step: GloBE Income → Deferred Tax Adj → Adj Covered Taxes → SBIE → Net GloBE Income → ETR → Top-up Rate → QDMTT Liability\n"
+            "- QDMTT safe harbour eligibility: OECD Administrative Guidance July 2023 — assess whether Ireland QDMTT qualifies for credit\n"
+            "- Qualified QDMTT criteria: must meet OECD consistency, standstill and equivalence conditions\n"
+            "- Deferred tax adjustments: SARS Interpretation Note 80 vs IFRS IAS 12 basis — reconciliation table\n"
+            "- Insurance-specific: equalisation reserve deductibility under SARS BGR 14 vs IFRS 17 (no equalisation reserve)\n"
+            "- Payment mechanics: Ireland CT1 return integration and instalment timing\n"
+            "- SARS IT14SD integration: QDMTT amount in supplementary schedule, ZAR conversion at spot rate\n"
+        ),
+        "IIR Allocation Memorandum": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (IIR Memorandum):\n"
+            "- South Africa UPE charging mechanism: Section 9H ITA and OECD Article 2.1 Income Inclusion Rule\n"
+            "- Top-down allocation: OUTsurance Holdings Ltd (ZA UPE) charges IIR on low-taxed constituent entities\n"
+            "- Ireland primary analysis: 12.5% STR → Finance Act 2024 QDMTT credits against IIR → residual IIR if QDMTT not fully qualifying\n"
+            "- Ownership structure: direct ownership ZA → IE (100%) and ZA → AU (100%) — no intermediate parent\n"
+            "- OECD Article 2.4: no intermediate parent entity complication — UPE charges IIR directly\n"
+            "- OECD Article 2.6: UTPR backstop — South Africa's UTPR status as UPE jurisdiction (Section 9J ITA)\n"
+            "- Section 9D CFC provisions: interaction between South Africa CFC rules and GloBE — anti-duplication\n"
+            "- QDMTT credit: Ireland QDMTT reduces IIR charged by ZA on Ireland income per OECD Article 2.1(d)\n"
+            "- Tax accounting entries: IAS 12 current and deferred tax for IIR in OUTsurance Holdings IT14\n"
+            "- Filing obligations: SARS IT14 IIR schedule — 12 months post year-end filing\n"
+            "- Elections and notifications: UPE filing status, safe harbour elections, QDMTT credit claims\n"
+        ),
+        "Transfer Pricing Impact Analysis": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (TP Analysis):\n"
+            "- Section 31 ITA arm's length standard and SARS Practice Note 7/2005 — full compliance review\n"
+            "- OECD Transfer Pricing Guidelines 2022 (July 2022 consolidated version) — Chapter I-III method selection\n"
+            "- TRANSACTION 1: Reinsurance premium ZA→IE ZAR 120m (TNMM) — actuarial pricing benchmarks, OECD Chapter VI special measures for risk\n"
+            "- TRANSACTION 2: Management fee ZA→AU ZAR 45m (CUP) — comparable uncontrolled service charge analysis\n"
+            "- TRANSACTION 3: IT licence royalty ZA→IE ZAR 30m (TNMM) — FLAGGED NON-ARMS-LENGTH — URGENT REMEDIATION REQUIRED\n"
+            "- GloBE interaction: TP adjustments under Section 31 ITA affect GloBE income per OECD Article 3.2 (financial accounts basis)\n"
+            "- SARS documentation: Master File and Local File per Practice Note 7 Section 6; contemporaneous requirement\n"
+            "- SARS CbCR: Section 257B TAA — group revenue > ZAR 10bn — mandatory annual CbCR filing\n"
+            "- Penalty exposure: Section 75B ITA — 200% understatement penalty; SARS TP audit priority for cross-border royalties\n"
+            "- Recommended actions: urgently review IT licence royalty — consider SARS Advance Pricing Agreement (APA) under Section 76P ITA\n"
+            "- Benchmarking sources: Bureau van Dijk Orbis, TP Catalyst, RoyaltyStat — interquartile range analysis\n"
+        ),
+        "Insurance-Specific Deferred Tax Adjustment": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (Deferred Tax Adjustment):\n"
+            "- OECD GloBE Article 4.4: deferred tax adjustments methodology — inclusion of deferred tax in covered taxes\n"
+            "- SARS Interpretation Note 80: IAS 12 deferred tax — SARS tax basis vs IFRS accounting basis reconciliation\n"
+            "- IFRS 17 Insurance Contracts (effective 1 January 2023): major impact on deferred tax positions:\n"
+            "  * Contractual Service Margin (CSM): timing difference — IFRS 17 profit release not taxable until claims paid\n"
+            "  * Risk Adjustment (RA): SARS Section 28(4) vs IFRS 17 fulfilment cash flow basis\n"
+            "  * Loss Component: deferred tax asset recognition — IAS 12 recoverability assessment\n"
+            "- IFRS 9 Financial Instruments: investment portfolio unrealised gains — SARS eighth schedule CGT timing\n"
+            "- Insurance-specific temporary differences requiring GloBE adjustment:\n"
+            "  * DAC (Deferred Acquisition Costs): IFRS 17 eliminates DAC — SARS Section 11(a) still allows deduction — significant deferred tax liability\n"
+            "  * IBNR/IBNER reserves: SARS Section 28(4) undiscounted vs IFRS 17 discounted fulfilment cash flows\n"
+            "  * Equalisation reserves: SARS Section 28(3) deductible vs IFRS 17 not recognised — deferred tax liability\n"
+            "  * Unearned premium reserve: SARS vs IFRS 17 measurement differences\n"
+            "- GloBE deferred tax cap: 15% rate cap on deferred tax assets (OECD Article 4.4.1)\n"
+            "- Recapture rule: deferred tax assets not utilised within 5 years — recapture into covered taxes\n"
+            "- Entity-level calculation tables with SARS tax basis, IFRS carrying amount, temporary difference, DTA/DTL\n"
+            "- SARS BGR 14: short-term insurance specific provisions to apply\n"
+        ),
+        "SBIE Workpaper": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (SBIE Workpaper):\n"
+            "- OECD Article 5.3: Substance-Based Income Exclusion mechanics and policy rationale\n"
+            "- CRITICAL — Apply exact OECD transitional SBIE rates:\n"
+            "  * FY2024: Payroll × 9.8% + Tangible Assets × 7.8%\n"
+            "  * FY2025: Payroll × 7.8% + Tangible Assets × 6.6%\n"
+            "  * FY2026: Payroll × 6.4% + Tangible Assets × 5.5%\n"
+            "  * FY2027: Payroll × 5.8% + Tangible Assets × 5.0%\n"
+            "  * Steady-state (FY2033+): Payroll × 5.0% + Tangible Assets × 5.0%\n"
+            "- Eligible payroll costs per OECD Article 5.3.2: salaries, wages, employer social security contributions — "
+            "SARS SDL and UIF contributions included; director fees excluded unless employment-related\n"
+            "- Eligible tangible assets per OECD Article 5.3.3: PPE net book value per IFRS (NOT SARS WDV); "
+            "investment properties (IAS 40) — assess insurance float eligibility\n"
+            "- Exclusions from tangible assets: financial assets, intangibles, IP, real estate held for resale\n"
+            "- Insurance-specific: assess whether insurance investment properties qualify as eligible tangible assets\n"
+            "- Entity-level SBIE calculation table: all 4 entities with payroll, tangible assets, SBIE amount\n"
+            "- Jurisdiction blending: SBIE is calculated at jurisdictional level — aggregate ZA entities\n"
+            "- SBIE optimisation: confirm election made in GIR; SBIE reduces GloBE net income (tax base)\n"
+            "- South Africa: large SBIE due to HQ payroll (ZAR 320m+ZAR 85m) — quantify ZA SBIE benefit\n"
+            "- Forward-looking: project SBIE under declining transitional rates to FY2033 steady-state\n"
+        ),
+        "Transitional Safe Harbour Assessment": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (Safe Harbour Assessment):\n"
+            "- OECD December 2022 Transitional CbCR Safe Harbour — three alternative qualifying tests:\n"
+            "  TEST 1 — De Minimis Test:\n"
+            "  * Condition: Revenue < EUR 10m AND Profit Before Tax < EUR 1m in CbCR data\n"
+            "  * Assess all three jurisdictions with EUR conversion at applicable FX rate\n"
+            "  TEST 2 — Simplified ETR Test:\n"
+            "  * Simplified ETR = Income Tax Expense per CbCR ÷ PBT per CbCR\n"
+            "  * Thresholds: FY2024: 15%, FY2025: 16%, FY2026: 17%\n"
+            "  * Expected: South Africa 27% STR — PASS; Australia 30% STR — PASS; Ireland 12.5% — LIKELY FAIL\n"
+            "  TEST 3 — Routine Profits Test:\n"
+            "  * Condition: PBT per CbCR ≤ SBIE calculated using CbCR payroll and tangible asset data\n"
+            "- CbCR data requirements: SARS Section 257B TAA — qualified CbCR per OECD criteria\n"
+            "- Qualifying CbCR definition: must meet OECD consistency, reliability and completeness criteria\n"
+            "- CbCR vs GloBE basis differences: document and assess materiality for safe harbour eligibility\n"
+            "- Transition period scope: fiscal years beginning before 1 July 2028\n"
+            "- Jurisdiction-by-jurisdiction assessment table with test results and safe harbour conclusion\n"
+            "- Election notification: safe harbour elections must be made in GIR Part V filed with SARS\n"
+            "- Recommended strategy: claim safe harbour for ZA and AU; perform full GloBE calculation for IE\n"
+            "- Risk: if CbCR data is unreliable, safe harbour may not be available — assess fallback position\n"
+        ),
+        "CbCR Reconciliation": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (CbCR Reconciliation):\n"
+            "- SARS Section 257B TAA: OUTsurance qualifies as UPE — group consolidated revenue > ZAR 10bn\n"
+            "- OECD BEPS Action 13 CbCR template: Table 1 (jurisdiction overview), Table 2 (entity list), Table 3 (additional info)\n"
+            "- SARS eFiling: CbCR XML per OECD schema v2.0 — filing deadline 12 months after financial year-end\n"
+            "- Subsidiary notifications: OUTsurance Australia (ATO) and OUTsurance Ireland (Revenue Commissioners) "
+            "must notify local tax authorities of UPE CbCR filing — penalty risk if omitted\n"
+            "- Key reconciliation items — CbCR data vs GloBE financial accounts basis:\n"
+            "  * Revenue: gross vs net of ceded reinsurance premiums (different treatment)\n"
+            "  * Profit: PBT per CbCR vs GloBE Income (deferred tax adj, IFRS 17 uplifts, excluded dividends)\n"
+            "  * Tax: income tax expense per CbCR vs Adjusted Covered Taxes per GloBE\n"
+            "  * Employees: CbCR headcount vs GloBE eligible payroll (FTE-weighted basis)\n"
+            "  * Assets: CbCR total assets vs GloBE eligible tangible assets (PPE only, IFRS basis)\n"
+            "- Transitional safe harbour suitability: assess CbCR as qualified CbCR for safe harbour tests\n"
+            "- SARS audit risk: material inconsistency between CbCR and IT14 — reconcile and document\n"
+            "- Three-year rolling analysis: FY2022, FY2023, FY2024 CbCR trend analysis\n"
+            "- GRI 207 public disclosure: consider voluntary publication of CbCR data in integrated annual report\n"
+        ),
+        "Board Tax Governance Report": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (Board Tax Governance Report):\n"
+            "- King IV Report on Corporate Governance for South Africa 2016:\n"
+            "  * Principle 15: Governing body ensures responsible corporate citizenship including tax\n"
+            "  * Recommended Practice 15.2: Tax governance policy, tax risk appetite, oversight by audit committee\n"
+            "  * Audit and Risk Committee Charter: specific tax risk oversight responsibilities\n"
+            "- GRI 207: Tax Standard 2019 — four disclosures: approach to tax, tax governance, stakeholder engagement, country-by-country reporting\n"
+            "- SARS Voluntary Disclosure Programme (VDP): note availability for any historic non-compliance\n"
+            "- OECD Tax Transparency: BEPS Action 13 public CbCR reporting — consider voluntary disclosure\n"
+            "- Board-level tax risk appetite statement: define tolerance for aggressive positions on GloBE scale\n"
+            "- Tax Risk Management Framework (TRMF):\n"
+            "  * Risk identification matrix: Pillar II, transfer pricing, QDMTT, CbCR, FSCA compliance\n"
+            "  * Risk controls: Big Four advisor reviews (EY/KPMG/Deloitte/PwC), external auditor tax sign-off\n"
+            "  * Escalation procedures: material tax risks to Audit Committee and Board\n"
+            "- Pillar II GloBE material disclosures for Board:\n"
+            "  * Ireland QDMTT exposure: quantified ZAR amount — Finance Act 2024 compliance timeline\n"
+            "  * IIR filing obligation as UPE — Section 9H ITA — South Africa first-ever GloBE filing\n"
+            "  * Transfer pricing risk: IT licence royalty flagged — potential Section 31 ITA adjustment\n"
+            "  * GIR first filing: 18-month transitional deadline — readiness assessment\n"
+            "- Insurance sector specific: FSCA Senior Manager regime — CFO and Head of Tax accountability\n"
+            "- Prudential Authority (SARB): capital adequacy impact of Pillar II tax liabilities\n"
+            "- Forward-looking: FY2025/2026 tax risk horizon — SBIE declining rates, UTPR implementation watch\n"
+        ),
+        "BEPS Action 13 Master File Summary": (
+            "TEMPLATE-SPECIFIC REQUIREMENTS (BEPS Action 13 Master File):\n"
+            "- OECD BEPS Action 13 — Chapter V Transfer Pricing Documentation: Master File structure\n"
+            "- SARS Practice Note 7/2005 Section 6: master file requirements for South African resident entities\n"
+            "- SARS TAA Section 29: record-keeping obligations — 5-year minimum retention\n"
+            "- Section 31 ITA: contemporaneous documentation mandatory at time of filing IT14\n"
+            "MASTER FILE STRUCTURE:\n"
+            "PART I — ORGANISATIONAL STRUCTURE:\n"
+            "  * OUTsurance Group legal entity chart: OUTsurance Holdings Ltd (ZA/UPE) → OUTsurance Life Ltd (ZA) + OUTsurance Australia Pty (AU) + OUTsurance Ireland Ltd (IE)\n"
+            "  * Ownership percentages, incorporation dates, tax registration numbers, tax residency\n"
+            "PART II — DESCRIPTION OF MNE GROUP BUSINESS:\n"
+            "  * Non-life insurance (ZA), life insurance (ZA), general insurance (AU), reinsurance (IE)\n"
+            "  * Group value chain: underwriting, claims, reinsurance, investment, shared services\n"
+            "  * Key functions, assets, risks (FAR analysis) per entity — economic substance assessment\n"
+            "PART III — INTANGIBLES:\n"
+            "  * Brand, IT systems, underwriting methodology — owned and developed in South Africa\n"
+            "  * DEMPE analysis: Development, Enhancement, Maintenance, Protection, Exploitation\n"
+            "  * IT licence royalty ZA→IE: arm's length review required — URGENT\n"
+            "PART IV — INTERCOMPANY FINANCIAL ACTIVITIES:\n"
+            "  * Reinsurance premium ZAR 120m (ZA→IE), management fee ZAR 45m (ZA→AU), IT royalty ZAR 30m (ZA→IE)\n"
+            "  * TP method selection rationale per transaction\n"
+            "PART V — FINANCIAL AND TAX POSITIONS:\n"
+            "  * Consolidated financials reference, Pillar II GloBE ETR by jurisdiction, SARS CbCR confirmation\n"
+            "- Penalty risk: SARS Section 75B ITA — 200% understatement penalty for TP non-compliance\n"
+        ),
+    }
+    specific = specifics.get(
+        template_name,
+        "Format as a complete professional compliance document with numbered sections, data tables, methodology notes, rule references, and action items."
+    )
+    footer = (
+        "\n\nDOCUMENT FORMAT REQUIREMENTS:\n"
+        "1. Formal header: document title, date (March 2026), prepared by (Tax Department), reviewed by (Head of Tax), classification: CONFIDENTIAL\n"
+        "2. Executive Summary (max 3 paragraphs)\n"
+        "3. Numbered sections with clear headings\n"
+        "4. Data tables for all quantitative calculations (columns: Description | Amount ZARm | Notes)\n"
+        "5. Cite specific OECD Article numbers, SARS section references, and IFRS standards throughout\n"
+        "6. Risk matrix where applicable (Risk | Likelihood | Impact | Mitigation)\n"
+        "7. Action items table: Action | Owner | Deadline | Status\n"
+        "8. Produce a complete, ready-to-use professional compliance document — do not truncate.\n"
+    )
+    return base + specific + footer
+
+
+def build_benchmarking_prompt(query, summary):
+    return (
+        "You are a Pillar II GloBE expert and South African tax specialist advising the OUTsurance Group tax team.\n"
+        "OUTsurance is a South African non-life insurance holding company (UPE) with subsidiaries in Australia and Ireland.\n\n"
+        "SOUTH AFRICAN REGULATORY CONTEXT:\n"
+        "- Section 9H ITA (GloBE IIR), Section 9I ITA (QDMTT), Section 9J ITA (UTPR) — effective 1 January 2024\n"
+        "- TLAB 2023: primary enabling legislation; SARS Practice Note 7/2005: transfer pricing\n"
+        "- Section 257B TAA: CbCR obligations; SARS Interpretation Note 80: deferred tax\n"
+        "- SARS BGR 14 and BGR 31: insurance-specific tax treatment\n"
+        "- King IV Principle 15: tax governance; FSCA and Prudential Authority oversight\n\n"
+        "GLOBAL FRAMEWORK:\n"
+        "- OECD GloBE Model Rules 2021, Commentary 2022, Administrative Guidance Feb/Jul/Dec 2023\n"
+        "- OECD Transitional CbCR Safe Harbour (December 2022)\n"
+        "- IFRS 17, IFRS 9, IAS 12 — insurance and tax accounting interactions\n"
+        "- Australia Treasury Laws Amendment Act 2024; Ireland Finance Act 2024 (Section 111AAK QDMTT)\n"
+        "- Big Four guidance: KPMG, Deloitte, PwC, EY Pillar Two trackers\n\n"
+        "GROUP POSITION:\n" + summary + "\n\n"
+        "QUESTION: " + query + "\n\n"
+        "Provide a technical, specific answer covering:\n"
+        "1. Direct answer with conclusion\n"
+        "2. Relevant OECD GloBE Model Rule articles and SARS legislation section references\n"
+        "3. Insurance-sector specific considerations (IFRS 17, DAC, technical provisions, reinsurance)\n"
+        "4. Application to OUTsurance's three-jurisdiction structure (ZA/AU/IE)\n"
+        "5. Comparison against Big Four (KPMG, Deloitte, PwC, EY) published guidance\n"
+        "6. Practical action steps with responsible owners\n"
+        "7. Filing deadlines and penalty risks\n\n"
+        "Be specific, technical, and cite legislation and OECD rule references throughout."
+    )
+
 
 with st.sidebar:
     st.markdown("## OUTsurance\n### Pillar II GloBE")
@@ -384,21 +650,7 @@ elif page == "AI Templates":
         summary = get_summary()
         entity_list = ", ".join([r["Entity"] + " (" + r["Jurisdiction"] + ")" for _, r in st.session_state.entities[st.session_state.entities["Active"] == True].iterrows()])
         tx_list = ", ".join([r["Description"] + " ZAR" + str(r["Amount"]) + "m" for _, r in st.session_state.transactions.iterrows()])
-        prompt = (
-            "You are a senior international tax expert in OECD Pillar II GloBE rules and insurance tax.\n\n"
-            "Generate a professional " + selected + " for OUTsurance Group, a South African insurance holding company with operations in South Africa (HQ/UPE), Australia, and Ireland.\n\n"
-            "LIVE DATA:\nEntities: " + entity_list + "\n\nGloBE results:\n" + summary + "\n\nTransactions: " + tx_list + "\n\n"
-            "Requirements:\n"
-            "1. Follow OECD GloBE Model Rules 2021 and Administrative Guidance 2023/2024\n"
-            "2. Address insurance-specific items: technical provisions, DAC, long-tail claims, equalisation reserves\n"
-            "3. Reference South Africa TLAB 2023, Australia Treasury Laws Amendment Act 2024, Ireland Finance Act 2024\n"
-            "4. Include section headers, data tables, calculation methodology and GloBE rule references\n"
-            "5. Highlight Ireland 12.5% STR QDMTT exposure\n"
-            "6. Include SBIE calculation with transitional rates\n"
-            "7. Benchmark against KPMG, Deloitte, PwC and EY guidance\n"
-            "8. Include action steps and filing deadlines\n\n"
-            "Format as a complete professional compliance document."
-        )
+        prompt = build_template_prompt(selected, entity_list, summary, tx_list)
         with st.spinner("Generating " + selected + "..."):
             output = call_claude(prompt)
         st.markdown("---")
@@ -433,16 +685,7 @@ elif page == "Benchmarking":
     query = st.text_area("Or type your question:", value=selected_preset or "", height=80)
     if st.button("Get AI Analysis", type="primary") and query:
         summary = get_summary()
-        prompt = (
-            "You are a Pillar II GloBE expert advising OUTsurance Group tax team.\n"
-            "OUTsurance is a South African non-life insurance holding company with subsidiaries in Australia and Ireland.\n\n"
-            "GROUP POSITION:\n" + summary + "\n\n"
-            "QUESTION: " + query + "\n\n"
-            "Provide:\n1. Direct specific answer\n2. Relevant GloBE Model Rule articles\n"
-            "3. Insurance-sector considerations\n4. Application to OUTsurance three-jurisdiction structure\n"
-            "5. Benchmarking against Big Four guidance\n6. Practical action steps\n7. Filing deadlines\n\n"
-            "Be specific and technical."
-        )
+        prompt = build_benchmarking_prompt(query, summary)
         with st.spinner("Analysing..."):
             answer = call_claude(prompt)
         st.markdown("---")
