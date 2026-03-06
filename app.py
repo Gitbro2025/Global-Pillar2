@@ -83,7 +83,7 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("#### Anthropic API Key")
     api_input = st.text_input("API Key", value=st.session_state.api_key, type="password", placeholder="sk-ant-...", label_visibility="collapsed")
-    if api_input:
+    if api_input and api_input != st.session_state.api_key:
         st.session_state.api_key = api_input
         st.success("Key saved")
     st.markdown("---")
@@ -109,7 +109,7 @@ if page == "Dashboard":
         group_etr = (total_tax / total_income * 100) if total_income > 0 else 0
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Group ETR", str(round(group_etr, 2)) + "%", "Above 15%" if group_etr >= 15 else "BELOW 15%", delta_color="normal" if group_etr >= 15 else "inverse")
-        k2.metric("Est. Top-up Tax", "ZAR " + str(round(total_topup, 1)) + "m", delta_color="inverse" if total_topup > 0 else "normal")
+        k2.metric("Est. Top-up Tax", "ZAR " + str(round(total_topup, 1)) + "m", delta="Tax due" if total_topup > 0 else "Compliant", delta_color="inverse" if total_topup > 0 else "normal")
         k3.metric("GloBE Income", "ZAR " + str(round(total_income, 1)) + "m")
         k4.metric("Active Entities", len(st.session_state.entities[st.session_state.entities["Active"] == True]))
         st.markdown("---")
@@ -216,7 +216,7 @@ elif page == "Transactions":
         with c1:
             tx_desc = st.text_input("Description")
             tx_from = st.selectbox("From", entity_names)
-            tx_to = st.selectbox("To", entity_names, index=min(3, len(entity_names) - 1))
+            tx_to = st.selectbox("To", entity_names, index=min(3, max(0, len(entity_names) - 1)))
             tx_amt = st.number_input("Amount (ZARm)", value=0.0)
         with c2:
             tx_type = st.selectbox("Type", ["Reinsurance Premium", "Ceding Commission", "Management Fee", "Royalty / IP", "Loan Interest", "Capital Contribution", "Dividend", "Claims Reimbursement"])
