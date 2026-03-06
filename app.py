@@ -1,8 +1,13 @@
 import streamlit as st
 import pandas as pd
 import anthropic
+import io
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 st.set_page_config(page_title="Pillar II GloBE", page_icon="P2", layout="wide")
+
+FREE_FIELD_COUNT = 20
 
 JUR_INFO = {
     "ZA": {"name": "South Africa", "role": "HQ / UPE", "std_rate": 27.0},
@@ -11,13 +16,19 @@ JUR_INFO = {
 }
 
 def init_state():
+    free_zeros = {f"Free{i:02d}": 0.0 for i in range(1, FREE_FIELD_COUNT + 1)}
     if "entities" not in st.session_state:
         st.session_state.entities = pd.DataFrame([
-            {"Entity": "OUTsurance Holdings Ltd", "Jurisdiction": "ZA", "Type": "Insurance", "Revenue": 8500.0, "PBT": 2100.0, "CoveredTaxes": 567.0, "DeferredTaxAdj": 45.0, "Payroll": 320.0, "TangibleAssets": 1200.0, "Active": True},
-            {"Entity": "OUTsurance Life Ltd", "Jurisdiction": "ZA", "Type": "Life Insurance", "Revenue": 3200.0, "PBT": 890.0, "CoveredTaxes": 240.0, "DeferredTaxAdj": 18.0, "Payroll": 85.0, "TangibleAssets": 340.0, "Active": True},
-            {"Entity": "OUTsurance Australia Pty", "Jurisdiction": "AU", "Type": "Gen. Insurance", "Revenue": 1800.0, "PBT": 420.0, "CoveredTaxes": 126.0, "DeferredTaxAdj": 12.0, "Payroll": 55.0, "TangibleAssets": 180.0, "Active": True},
-            {"Entity": "OUTsurance Ireland Ltd", "Jurisdiction": "IE", "Type": "Reinsurance", "Revenue": 950.0, "PBT": 280.0, "CoveredTaxes": 35.0, "DeferredTaxAdj": 8.0, "Payroll": 22.0, "TangibleAssets": 95.0, "Active": True},
+            {**{"Entity": "OUTsurance Holdings Ltd", "Jurisdiction": "ZA", "Type": "Insurance", "Revenue": 8500.0, "PBT": 2100.0, "CoveredTaxes": 567.0, "DeferredTaxAdj": 45.0, "Payroll": 320.0, "TangibleAssets": 1200.0, "Active": True}, **free_zeros},
+            {**{"Entity": "OUTsurance Life Ltd", "Jurisdiction": "ZA", "Type": "Life Insurance", "Revenue": 3200.0, "PBT": 890.0, "CoveredTaxes": 240.0, "DeferredTaxAdj": 18.0, "Payroll": 85.0, "TangibleAssets": 340.0, "Active": True}, **free_zeros},
+            {**{"Entity": "OUTsurance Australia Pty", "Jurisdiction": "AU", "Type": "Gen. Insurance", "Revenue": 1800.0, "PBT": 420.0, "CoveredTaxes": 126.0, "DeferredTaxAdj": 12.0, "Payroll": 55.0, "TangibleAssets": 180.0, "Active": True}, **free_zeros},
+            {**{"Entity": "OUTsurance Ireland Ltd", "Jurisdiction": "IE", "Type": "Reinsurance", "Revenue": 950.0, "PBT": 280.0, "CoveredTaxes": 35.0, "DeferredTaxAdj": 8.0, "Payroll": 22.0, "TangibleAssets": 95.0, "Active": True}, **free_zeros},
         ])
+    else:
+        for i in range(1, FREE_FIELD_COUNT + 1):
+            col = f"Free{i:02d}"
+            if col not in st.session_state.entities.columns:
+                st.session_state.entities[col] = 0.0
     if "transactions" not in st.session_state:
         st.session_state.transactions = pd.DataFrame([
             {"Description": "Reinsurance premium ZA to IE", "From": "OUTsurance Holdings Ltd", "To": "OUTsurance Ireland Ltd", "Amount": 120.0, "Type": "Reinsurance Premium", "TP_Method": "TNMM", "ArmsLength": True},
@@ -26,6 +37,22 @@ def init_state():
         ])
     if "api_key" not in st.session_state:
         st.session_state.api_key = ""
+    if "free_field_labels" not in st.session_state:
+        st.session_state.free_field_labels = {f"Free{i:02d}": f"Custom Field {i}" for i in range(1, FREE_FIELD_COUNT + 1)}
+    if "free_field_visible" not in st.session_state:
+        st.session_state.free_field_visible = {f"Free{i:02d}": False for i in range(1, FREE_FIELD_COUNT + 1)}
+    if "core_field_labels" not in st.session_state:
+        st.session_state.core_field_labels = {
+            "Entity": "Entity Name",
+            "Jurisdiction": "Jurisdiction",
+            "Type": "Entity Type",
+            "Revenue": "Revenue (ZARm)",
+            "PBT": "Profit Before Tax (ZARm)",
+            "CoveredTaxes": "Covered Taxes (ZARm)",
+            "DeferredTaxAdj": "Deferred Tax Adj (ZARm)",
+            "Payroll": "Payroll (ZARm)",
+            "TangibleAssets": "Tangible Assets (ZARm)",
+        }
 
 init_state()
 
@@ -78,6 +105,34 @@ def get_summary():
         lines.append(r["Name"] + " (" + r["Jur"] + "): GloBE Income ZAR" + str(round(r["GloBE_Income"], 1)) + "m, ETR " + str(round(r["ETR"], 2)) + "%, Top-up Tax ZAR" + str(round(r["TopUp_Tax"], 1)) + "m")
     return "\n".join(lines)
 
+def generate_word_doc(title, content):
+    doc = Document()
+    heading = doc.add_heading(title, 0)
+    heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub = doc.add_paragraph("OUTsurance Group | Pillar II GloBE Compliance | FY 2024")
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    doc.add_paragraph()
+    for line in content.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("#### "):
+            doc.add_heading(stripped[5:], 4)
+        elif stripped.startswith("### "):
+            doc.add_heading(stripped[4:], 3)
+        elif stripped.startswith("## "):
+            doc.add_heading(stripped[3:], 2)
+        elif stripped.startswith("# "):
+            doc.add_heading(stripped[2:], 1)
+        elif stripped in ("", "---"):
+            doc.add_paragraph()
+        elif stripped.startswith("- ") or stripped.startswith("* "):
+            doc.add_paragraph(stripped[2:], style="List Bullet")
+        else:
+            doc.add_paragraph(stripped)
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf.getvalue()
+
 with st.sidebar:
     st.markdown("## OUTsurance\n### Pillar II GloBE")
     st.markdown("---")
@@ -87,7 +142,7 @@ with st.sidebar:
         st.session_state.api_key = api_input
         st.success("Key saved")
     st.markdown("---")
-    page = st.radio("Go to", ["Dashboard", "Entities", "Transactions", "Upload Data", "AI Templates", "Benchmarking"], label_visibility="collapsed")
+    page = st.radio("Go to", ["Dashboard", "Entities", "Transactions", "Upload Data", "AI Templates", "Benchmarking", "Settings"], label_visibility="collapsed")
     st.markdown("---")
     r_side = calc_globe()
     ttu = r_side["TopUp_Tax"].sum() if not r_side.empty else 0
@@ -142,46 +197,78 @@ if page == "Dashboard":
 
 elif page == "Entities":
     st.markdown("## Entity Management")
+    cfl = st.session_state.core_field_labels
+    ffl = st.session_state.free_field_labels
+    ffv = st.session_state.free_field_visible
+    visible_free = [f"Free{i:02d}" for i in range(1, FREE_FIELD_COUNT + 1) if ffv.get(f"Free{i:02d}", False)]
+
     tab1, tab2 = st.tabs(["View / Edit", "Add New"])
     with tab1:
+        col_cfg = {
+            "Jurisdiction": st.column_config.SelectboxColumn(cfl["Jurisdiction"], options=list(JUR_INFO.keys())),
+            "Type": st.column_config.SelectboxColumn(cfl["Type"], options=["Insurance", "Life Insurance", "Gen. Insurance", "Reinsurance", "Holding", "Other"]),
+            "Revenue": st.column_config.NumberColumn(cfl["Revenue"], format="%.1f"),
+            "PBT": st.column_config.NumberColumn(cfl["PBT"], format="%.1f"),
+            "CoveredTaxes": st.column_config.NumberColumn(cfl["CoveredTaxes"], format="%.1f"),
+            "DeferredTaxAdj": st.column_config.NumberColumn(cfl["DeferredTaxAdj"], format="%.1f"),
+            "Payroll": st.column_config.NumberColumn(cfl["Payroll"], format="%.1f"),
+            "TangibleAssets": st.column_config.NumberColumn(cfl["TangibleAssets"], format="%.1f"),
+            "Active": st.column_config.CheckboxColumn("In Scope"),
+        }
+        for ff in visible_free:
+            col_cfg[ff] = st.column_config.NumberColumn(ffl[ff], format="%.2f")
+        display_cols = ["Entity", "Jurisdiction", "Type", "Revenue", "PBT", "CoveredTaxes", "DeferredTaxAdj", "Payroll", "TangibleAssets", "Active"] + visible_free
         edited = st.data_editor(
-            st.session_state.entities,
+            st.session_state.entities[display_cols],
             use_container_width=True,
             num_rows="dynamic",
-            column_config={
-                "Jurisdiction": st.column_config.SelectboxColumn("Jurisdiction", options=["ZA", "AU", "IE"]),
-                "Type": st.column_config.SelectboxColumn("Type", options=["Insurance", "Life Insurance", "Gen. Insurance", "Reinsurance", "Holding", "Other"]),
-                "Revenue": st.column_config.NumberColumn("Revenue (ZARm)", format="%.1f"),
-                "PBT": st.column_config.NumberColumn("Profit Before Tax", format="%.1f"),
-                "CoveredTaxes": st.column_config.NumberColumn("Covered Taxes", format="%.1f"),
-                "DeferredTaxAdj": st.column_config.NumberColumn("Deferred Tax Adj", format="%.1f"),
-                "Payroll": st.column_config.NumberColumn("Payroll", format="%.1f"),
-                "TangibleAssets": st.column_config.NumberColumn("Tangible Assets", format="%.1f"),
-                "Active": st.column_config.CheckboxColumn("In Scope"),
-            },
+            column_config=col_cfg,
             hide_index=True
         )
         if st.button("Save Changes", type="primary"):
-            st.session_state.entities = edited
+            saved = edited.reset_index(drop=True).copy()
+            n_min = min(len(saved), len(st.session_state.entities))
+            for i in range(1, FREE_FIELD_COUNT + 1):
+                col = f"Free{i:02d}"
+                if col not in saved.columns:
+                    saved[col] = 0.0
+                    if col in st.session_state.entities.columns:
+                        for idx in range(n_min):
+                            saved.at[idx, col] = st.session_state.entities.at[idx, col]
+            st.session_state.entities = saved
             st.success("Saved!")
             st.rerun()
+        if visible_free:
+            st.info(f"{len(visible_free)} custom field(s) shown. Manage fields in **Settings**.")
+        else:
+            st.info("No custom fields enabled. Go to **Settings** to enable and label your 20 free fields.")
+
     with tab2:
         c1, c2, c3 = st.columns(3)
         with c1:
-            n_name = st.text_input("Entity Name")
-            n_jur = st.selectbox("Jurisdiction", ["ZA", "AU", "IE"])
-            n_type = st.selectbox("Type", ["Insurance", "Life Insurance", "Gen. Insurance", "Reinsurance", "Holding", "Other"])
+            n_name = st.text_input(cfl["Entity"])
+            n_jur = st.selectbox(cfl["Jurisdiction"], list(JUR_INFO.keys()))
+            n_type = st.selectbox(cfl["Type"], ["Insurance", "Life Insurance", "Gen. Insurance", "Reinsurance", "Holding", "Other"])
         with c2:
-            n_rev = st.number_input("Revenue (ZARm)", value=0.0)
-            n_pbt = st.number_input("Profit Before Tax", value=0.0)
-            n_tax = st.number_input("Covered Taxes", value=0.0)
+            n_rev = st.number_input(cfl["Revenue"], value=0.0)
+            n_pbt = st.number_input(cfl["PBT"], value=0.0)
+            n_tax = st.number_input(cfl["CoveredTaxes"], value=0.0)
         with c3:
-            n_dtx = st.number_input("Deferred Tax Adj", value=0.0)
-            n_pay = st.number_input("Payroll", value=0.0)
-            n_tan = st.number_input("Tangible Assets", value=0.0)
+            n_dtx = st.number_input(cfl["DeferredTaxAdj"], value=0.0)
+            n_pay = st.number_input(cfl["Payroll"], value=0.0)
+            n_tan = st.number_input(cfl["TangibleAssets"], value=0.0)
+        free_vals = {}
+        if visible_free:
+            st.markdown("**Custom Fields**")
+            ff_cols = st.columns(min(4, len(visible_free)))
+            for k, ff in enumerate(visible_free):
+                with ff_cols[k % len(ff_cols)]:
+                    free_vals[ff] = st.number_input(ffl[ff], value=0.0, key=f"add_{ff}")
         if st.button("Add Entity", type="primary"):
             if n_name:
-                new_row = pd.DataFrame([{"Entity": n_name, "Jurisdiction": n_jur, "Type": n_type, "Revenue": n_rev, "PBT": n_pbt, "CoveredTaxes": n_tax, "DeferredTaxAdj": n_dtx, "Payroll": n_pay, "TangibleAssets": n_tan, "Active": True}])
+                free_defaults = {f"Free{i:02d}": 0.0 for i in range(1, FREE_FIELD_COUNT + 1)}
+                free_defaults.update(free_vals)
+                new_row = pd.DataFrame([{**{"Entity": n_name, "Jurisdiction": n_jur, "Type": n_type, "Revenue": n_rev, "PBT": n_pbt, "CoveredTaxes": n_tax, "DeferredTaxAdj": n_dtx, "Payroll": n_pay, "TangibleAssets": n_tan, "Active": True}, **free_defaults}])
                 st.session_state.entities = pd.concat([st.session_state.entities, new_row], ignore_index=True)
                 st.success("Added " + n_name)
                 st.rerun()
@@ -274,6 +361,8 @@ elif page == "Upload Data":
                 for nc in ["Revenue", "PBT", "CoveredTaxes", "DeferredTaxAdj", "Payroll", "TangibleAssets"]:
                     if nc in imported.columns:
                         imported[nc] = pd.to_numeric(imported[nc], errors="coerce").fillna(0.0)
+                for i in range(1, FREE_FIELD_COUNT + 1):
+                    imported[f"Free{i:02d}"] = 0.0
                 st.session_state.entities = pd.concat([st.session_state.entities, imported], ignore_index=True)
                 st.success("Imported " + str(len(imported)) + " entities!")
                 st.rerun()
@@ -315,7 +404,12 @@ elif page == "AI Templates":
         st.markdown("---")
         st.markdown("### " + selected)
         st.text_area("Output", value=output, height=500, label_visibility="collapsed")
-        st.download_button("Download as TXT", data=output, file_name=selected.replace(" ", "_") + ".txt", mime="text/plain")
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button("Download as TXT", data=output, file_name=selected.replace(" ", "_") + ".txt", mime="text/plain")
+        with dl2:
+            word_bytes = generate_word_doc(selected, output)
+            st.download_button("Download as Word (.docx)", data=word_bytes, file_name=selected.replace(" ", "_") + ".docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
 elif page == "Benchmarking":
     st.markdown("## Global Best Practice Benchmarking")
@@ -354,7 +448,12 @@ elif page == "Benchmarking":
         st.markdown("---")
         st.markdown("### AI Analysis")
         st.markdown(answer)
-        st.download_button("Save Analysis", data=answer, file_name="pillar2_analysis.txt", mime="text/plain")
+        dl1, dl2 = st.columns(2)
+        with dl1:
+            st.download_button("Save Analysis as TXT", data=answer, file_name="pillar2_analysis.txt", mime="text/plain")
+        with dl2:
+            word_bytes = generate_word_doc("Pillar II GloBE Analysis", answer)
+            st.download_button("Save Analysis as Word (.docx)", data=word_bytes, file_name="pillar2_analysis.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     st.markdown("---")
     st.markdown("### Jurisdiction Reference")
     c1, c2, c3 = st.columns(3)
@@ -367,3 +466,48 @@ elif page == "Benchmarking":
     with c3:
         with st.expander("Ireland", expanded=True):
             st.markdown("- Legislation: Finance Act 2024\n- STR: 12.5%\n- QDMTT top-up to 15% required\n- PRIMARY RISK for OUTsurance")
+
+elif page == "Settings":
+    st.markdown("## Settings & Field Configuration")
+    tab1, tab2 = st.tabs(["Core Fields", "Free Fields (20)"])
+
+    with tab1:
+        st.markdown("### Core GloBE Field Labels")
+        st.markdown("Customise the display labels for the core GloBE entity fields. These fields are required for tax calculations and cannot be disabled.")
+        cfl = st.session_state.core_field_labels
+        c1, c2, c3 = st.columns(3)
+        fields = list(cfl.keys())
+        for j, field in enumerate(fields):
+            col = [c1, c2, c3][j % 3]
+            with col:
+                new_lbl = st.text_input(f"Label for '{field}'", value=cfl[field], key=f"core_{field}")
+                st.session_state.core_field_labels[field] = new_lbl
+        if st.button("Save Core Labels", type="primary", key="save_core"):
+            st.success("Core field labels updated!")
+
+    with tab2:
+        st.markdown("### Free Quantitative Fields")
+        st.markdown(
+            "Enable and name up to **20 additional quantitative fields** per company. "
+            "Use these to capture any additional financial metrics beyond the standard GloBE fields — "
+            "e.g. *Technical Provisions*, *DAC Balance*, *Equalisation Reserve*, *Gross Written Premium*, etc."
+        )
+        st.markdown("---")
+        ffl = st.session_state.free_field_labels
+        ffv = st.session_state.free_field_visible
+        enabled_count = sum(1 for v in ffv.values() if v)
+        st.info(f"{enabled_count} of {FREE_FIELD_COUNT} free fields currently enabled.")
+        cols = st.columns(4)
+        for i in range(1, FREE_FIELD_COUNT + 1):
+            field = f"Free{i:02d}"
+            col = cols[(i - 1) % 4]
+            with col:
+                st.markdown(f"**Field {i}**")
+                vis = st.checkbox("Enable", value=ffv[field], key=f"vis_{field}")
+                lbl = st.text_input("Label", value=ffl[field], key=f"lbl_{field}", disabled=not vis)
+                st.session_state.free_field_visible[field] = vis
+                if vis:
+                    st.session_state.free_field_labels[field] = lbl
+                st.markdown("")
+        if st.button("Save Free Field Settings", type="primary", key="save_free"):
+            st.success("Free field settings saved! Go to **Entities** to see and edit the enabled fields.")
